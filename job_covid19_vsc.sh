@@ -15,8 +15,14 @@ cd $VSC_DATA/covid19/
 
 source activate science
 
-Rscript ./vsc_00_main_v20200329.R &
+# run all
+Rscript ./vsc_00_main_v20200329.R
 
+# run for each combination simulations 1 till 10
+Rscript ./vsc_00_main_v20200329.R -start 1 -end 10
+
+# run for combination 1, simulations 1 till 10
+Rscript ./vsc_00_main_v20200329.R -start 1 -end 10 -comb 1
 
 
 conda deactivate

@@ -47,15 +47,44 @@ setwd(Sys.getenv('VSC_SCRATCH'))
 # --------------------------------------------------------------------------- #
 #  INPUT ----
 # --------------------------------------------------------------------------- #
-  # ------------------------- #
-  #  Name save all ----
-  # ------------------------- #
   
-    # name to save simulation run
-      date_sim_run <- as.Date(x = "29.03.2020", format = "%d.%m.%Y")
-      nam_infosim <- "_pattern868_nsim1000"
-      nam_file_belgsim <- paste0(date_sim_run, "_simulation", nam_infosim,".Rdata")
-      
+  # -------------------------- #
+  #  Command line interface  ----
+  # -------------------------- #
+  
+  # option to parse command line operation: start-stop
+  args <- commandArgs(TRUE)
+  
+  # set defaults
+  cli_foreach_start  = NA
+  cli_foreach_end    = NA
+  cli_combination    = NA
+  
+  if(length(args)>0){
+    
+    cli_arg_all   <- unlist(args)
+    num_arg       <- length(cli_arg_all)
+    cli_arg_tag   <- cli_arg_all[seq(1,num_arg,2)]
+    cli_arg_value <- cli_arg_all[seq(2,num_arg,2)]
+    
+    print(cli_arg_tag)
+    print(cli_arg_value)
+    
+    # defensive programming
+    if(num_arg %% 2 != 0){
+      stop("CLI ARGUMENT ERROR: UNEVEN ARGUMENTS")
+    }
+    
+    if(any(!cli_arg_tag %in% c("-start","-end",'-comb'))){
+      stop("CLI ARGUMENT ERROR: UNKNOWN TAG(S)")
+    }
+    
+    # override default parameters by CLI values
+    if(any(cli_arg_tag=='-start')){ cli_foreach_start    <- as.double(cli_arg_value[cli_arg_tag=='-start']) }
+    if(any(cli_arg_tag=='-end'))  { cli_foreach_end      <- as.double(cli_arg_value[cli_arg_tag=='-end'])  }
+    if(any(cli_arg_tag=='-comb')) { cli_combination      <- as.double(cli_arg_value[cli_arg_tag=='-comb'])  }
+  } 
+  
   # ------------------------- #
   #  Belgium population ----
   # ------------------------- #
@@ -195,6 +224,22 @@ setwd(Sys.getenv('VSC_SCRATCH'))
         # for age_right <- FALSE # logical, indicating if the intervals should 
         #                  be closed on the right (and open on the left) or vice versa.
 
+    
+      # ------------------------- #
+      #  Name save all ----
+      # ------------------------- #
+      
+      # name to save simulation run
+      date_sim_run <- as.Date(Sys.time(), format = "%d.%m.%Y")
+      nam_infosim <- paste0("_pattern868_nsim",nsimulations)
+      if(!is.na(cli_foreach_start) & !is.na(cli_foreach_end)){
+        nam_infosim <- paste0(nam_infosim,'_s',cli_foreach_start,'e',cli_foreach_end)
+      }
+      if(!is.na(cli_combination)){
+        nam_infosim <- paste0(nam_infosim,'_c',cli_combination)
+      }
+      nam_file_belgsim <- paste0(date_sim_run, "_simulation", nam_infosim,".Rdata")
+      
   # ------------------------- #
   #  foreach - parallel ----
   # ------------------------- #    
@@ -377,16 +422,23 @@ setwd(Sys.getenv('VSC_SCRATCH'))
 # --------------------------------------------------------------------------- #
       print('save before simulation')
       save(list = ls(all.names = TRUE), file = "beforesimulation.RData")
-#       
-#       print('start simulation')
-#       
-#  list_nam_file_sim_comb <- NULL
-#  i_comb <- 1 #HIIIIEEEEEEEEEERRRRRRRR TO CHANGE ----      
-#  #for(i_comb in 1:length(info_simulation)){  
-#    
-#    nam_file_sim_comb <- paste0(date_sim_run, "_simulation_",nam_infosim,
-#                                "_combination_",
-#                                info_simulation[[i_comb]]$combination,".Rdata")
+
+      # select all simulation index
+      for_simulation_indices <- 1:length(info_simulation)
+      
+      # option to select one, based on command line interface
+      if(!is.na(cli_combination) && cli_combination <= length(info_simulation)){
+        for_simulation_indices <- cli_combination
+      }   
+      
+      list_nam_file_sim_comb <- NULL
+      #  i_comb <- 1 #HIIIIEEEEEEEEEERRRRRRRR TO CHANGE ----      
+      for(i_comb in for_simulation_indices){  
+        
+        nam_file_sim_comb <- gsub(".Rdata",
+                                  paste0("_combination_",info_simulation[[i_comb]]$combination,".Rdata"),
+                                  nam_file_belgsim)
+        
 #    list_nam_file_sim_comb <- c(list_nam_file_sim_comb,
 #                                nam_file_sim_comb) 
 #    
@@ -478,13 +530,23 @@ setwd(Sys.getenv('VSC_SCRATCH'))
 #         registerDoParallel(cores = 28)
 #          
 #         
-#         loop_output <-
-#               foreach(i_pattern = 1:nrow(dt_patterns_mat),
-#                       .combine='comb',
-#                       .packages = c("tidyverse"),         # load packages
-#                       .inorder = FALSE,                   # if the order is not important,
-#                       .multicombine = TRUE                # set TRUE if the .combine function can accept more than two arguments
-#                     ) %dopar% {#  loop
+#         # default: run all
+        cli_foreach_indices <- 1:nrow(dt_patterns_mat)
+        # use command line parameters?
+        if(!is.na(cli_foreach_start)){
+          cli_foreach_indices <- cli_foreach_start:cli_foreach_end
+          # defensive programming: limit indices to nrow(dt_patterns_mat)
+          cli_foreach_indices <- cli_foreach_indices[cli_foreach_indices<nrow(dt_patterns_mat)]
+        }
+        
+        
+        loop_output <-
+          foreach(i_pattern = cli_foreach_indices,
+                      .combine='comb',
+                      .packages = c("tidyverse"),         # load packages
+                      .inorder = FALSE,                   # if the order is not important,
+                      .multicombine = TRUE                # set TRUE if the .combine function can accept more than two arguments
+                    ) %dopar% {#  loop
 # 
 #             # prev_estimated_cat_sim
 #               res <-
@@ -597,7 +659,7 @@ setwd(Sys.getenv('VSC_SCRATCH'))
 #                       res_repcases_factor_cat_vec = res_repcases_factor_cat_vec))
 #                       
 #                       
-#                     }
+                     } # end foreach
 # 
 #           #stopCluster(cl)
 # 
@@ -628,7 +690,7 @@ setwd(Sys.getenv('VSC_SCRATCH'))
 #               time_diff,
 #              file = paste0("results/covid19/", nam_file_sim_comb))
 #         
-#  # } # loop over combinations of simulation 
+ } # loop over combinations of simulation 
 #          
 #         print('simulation done')  
 #       
